@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -81,7 +82,7 @@ impl CoreLatch {
     #[inline]
     fn new() -> Self {
         Self {
-            state: AtomicUsize::new(0),
+            state: AtomicUsize::new(UNSET),
         }
     }
 
@@ -129,6 +130,11 @@ impl CoreLatch {
         old_state == SLEEPING
     }
 
+    #[inline]
+    fn reset(&self) {
+        self.state.store(UNSET, Ordering::Release);
+    }
+
     /// Test if this latch has been set.
     #[inline]
     pub(super) fn probe(&self) -> bool {
@@ -148,7 +154,7 @@ impl AsCoreLatch for CoreLatch {
 /// that becomes true when `set()` is called.
 pub(super) struct SpinLatch<'r> {
     core_latch: CoreLatch,
-    registry: &'r Arc<Registry>,
+    registry: Cow<'r, Arc<Registry>>,
     target_worker_index: usize,
     cross: bool,
 }
@@ -162,7 +168,17 @@ impl<'r> SpinLatch<'r> {
     pub(super) fn new(thread: &'r WorkerThread) -> SpinLatch<'r> {
         SpinLatch {
             core_latch: CoreLatch::new(),
-            registry: thread.registry(),
+            registry: Cow::Borrowed(thread.registry()),
+            target_worker_index: thread.index(),
+            cross: false,
+        }
+    }
+
+    #[inline]
+    pub(super) fn new_static(thread: &WorkerThread) -> SpinLatch<'static> {
+        SpinLatch {
+            core_latch: CoreLatch::new(),
+            registry: Cow::Owned(Arc::clone(thread.registry())),
             target_worker_index: thread.index(),
             cross: false,
         }
@@ -182,6 +198,11 @@ impl<'r> SpinLatch<'r> {
     #[inline]
     pub(super) fn probe(&self) -> bool {
         self.core_latch.probe()
+    }
+
+    #[inline]
+    pub(super) fn reset(&self) {
+        self.core_latch.reset()
     }
 }
 
@@ -203,7 +224,7 @@ impl<'r> Latch for SpinLatch<'r> {
             // latch and the other thread sees it and exits, causing
             // the registry to be deallocated, all before we get a
             // chance to invoke `registry.notify_worker_latch_is_set`.
-            cross_registry = Arc::clone((*this).registry);
+            cross_registry = Arc::clone(&(*this).registry);
             &cross_registry
         } else {
             // If this is not a "cross-registry" spin-latch, then the
@@ -211,7 +232,7 @@ impl<'r> Latch for SpinLatch<'r> {
             // that the registry stays alive. However, that doesn't
             // include this *particular* `Arc` handle if the waiting
             // thread then exits, so we must completely dereference it.
-            (*this).registry
+            &(*this).registry
         };
         let target_worker_index = (*this).target_worker_index;
 
