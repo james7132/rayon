@@ -17,11 +17,14 @@ categories = ["concurrency"]
 
 # Some dependencies may not be their latest version, in order to support older rustc.
 [dependencies]
+async-task = { version = "4.7", optional = true }
+async-channel = { version = "2.2.0", optional = true }
 crossbeam-deque = "0.8.1"
 crossbeam-utils = "0.8.0"
 wasm_sync = { version = "0.1.0", optional = true }
 
 [features]
+async = ["dep:async-task", "dep:async-channel"]
 
 # This feature switches to a spin-lock implementation on the browser's
 # main thread to avoid the forbidden `atomics.wait`.

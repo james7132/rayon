@@ -28,6 +28,8 @@ version = "1.0"
 default-features = false
 
 [features]
+async = ["rayon-core/async"]
+
 # This feature switches to a spin-lock implementation on the browser's
 # main thread to avoid the forbidden `atomics.wait`.
 #

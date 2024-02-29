@@ -1,9 +1,13 @@
 use crate::latch::Latch;
 use crate::unwind;
+#[cfg(feature = "async")]
+use async_task::Runnable;
 use crossbeam_deque::{Injector, Steal};
 use std::any::Any;
 use std::cell::UnsafeCell;
 use std::mem;
+#[cfg(feature = "async")]
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 pub(super) enum JobResult<T> {
@@ -49,6 +53,21 @@ impl JobRef {
         JobRef {
             pointer: data as *const (),
             execute_fn: <T as Job>::execute,
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub(super) fn new_async(runnable: Runnable<()>) -> JobRef {
+        // TODO: call registry.increment_terminate_count()?
+        JobRef {
+            pointer: runnable.into_raw().as_ptr(),
+            execute_fn: |this| unsafe {
+                // TODO: handle panics with registry.catch_unwind(..)
+                // TODO: should we always use NonNull for `Job`?
+                // TODO: call registry.terminate()?
+                let this = NonNull::new_unchecked(this as *mut ());
+                async_task::Runnable::<()>::from_raw(this).run();
+            },
         }
     }
 

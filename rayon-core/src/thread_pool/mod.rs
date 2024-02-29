@@ -4,6 +4,8 @@
 //! [`ThreadPool`]: struct.ThreadPool.html
 
 use crate::broadcast::{self, BroadcastContext};
+#[cfg(feature = "async")]
+use crate::job::JobRef;
 use crate::join;
 use crate::registry::{Registry, ThreadSpawn, WorkerThread};
 use crate::scope::{do_in_place_scope, do_in_place_scope_fifo};
@@ -13,6 +15,8 @@ use crate::{scope_fifo, ScopeFifo};
 use crate::{ThreadPoolBuildError, ThreadPoolBuilder};
 use std::error::Error;
 use std::fmt;
+#[cfg(feature = "async")]
+use std::future::Future;
 use std::sync::Arc;
 
 mod test;
@@ -347,6 +351,30 @@ impl ThreadPool {
     {
         // We assert that `self.registry` has not terminated.
         unsafe { spawn::spawn_in(op, &self.registry) }
+    }
+
+    /// Spawns a asynchronous future in this thread-pool. This task will
+    /// run in the implicit, global scope, which means that it may outlast
+    /// the current stack frame -- therefore, it cannot capture any references
+    /// onto the stack (you will likely need a `move` closure).
+    ///
+    /// See also: [the `spawn()` function defined on scopes][spawn].
+    ///
+    /// [spawn]: struct.Scope.html#method.spawn
+    #[cfg(feature = "async")]
+    pub fn spawn_async<R>(
+        &self,
+        future: impl Future<Output = R> + Send + 'static,
+    ) -> async_task::Task<R>
+    where
+        R: Send + 'static,
+    {
+        let registry = self.registry.clone();
+        let (task, handle) = async_task::spawn(future, move |runnable| {
+            registry.inject_or_push(JobRef::new_async(runnable))
+        });
+        task.schedule();
+        handle
     }
 
     /// Spawns an asynchronous task in this thread-pool. This task will
