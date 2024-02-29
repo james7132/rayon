@@ -78,7 +78,9 @@ use std::thread;
 #[macro_use]
 mod private;
 
-mod block;
+/// Utilities for using `Future`s with Rayon.
+#[cfg(feature = "async")]
+pub mod futures;
 mod broadcast;
 mod job;
 mod join;
@@ -93,7 +95,6 @@ mod unwind;
 mod compile_fail;
 mod test;
 
-pub use self::block::block_on;
 pub use self::broadcast::{broadcast, spawn_broadcast, BroadcastContext};
 pub use self::join::{join, join_context};
 pub use self::registry::ThreadBuilder;

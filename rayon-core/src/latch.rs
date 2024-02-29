@@ -131,6 +131,7 @@ impl CoreLatch {
     }
 
     #[inline]
+    #[cfg(feature = "async")]
     fn reset(&self) {
         self.state.store(UNSET, Ordering::Release);
     }
@@ -175,6 +176,7 @@ impl<'r> SpinLatch<'r> {
     }
 
     #[inline]
+    #[cfg(feature = "async")]
     pub(super) fn new_static(thread: &WorkerThread) -> SpinLatch<'static> {
         SpinLatch {
             core_latch: CoreLatch::new(),
@@ -201,6 +203,7 @@ impl<'r> SpinLatch<'r> {
     }
 
     #[inline]
+    #[cfg(feature = "async")]
     pub(super) fn reset(&self) {
         self.core_latch.reset()
     }
